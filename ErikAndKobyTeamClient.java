@@ -22,9 +22,9 @@ import spacesettlers.simulator.Toroidal2DPhysics;
 public class ErikAndKobyTeamClient extends TeamClient{
 
 	private static final double MIN_ENERGY = 2000;
-	private KnowledgeRepresentation myKnolwedge = null;
-	private KnowledgeRep2 myGlobalKnowledge = null;
-	private UUID KR1_Id;
+	private KnowledgeRep2 globalKnowledge = null;
+	private UUID shipOne;
+	private UUID shipTwo;
 
 	@Override
 	public Map<UUID, AbstractAction> getMovementStart(Toroidal2DPhysics space,
@@ -41,71 +41,49 @@ public class ErikAndKobyTeamClient extends TeamClient{
 
 		// this is the return set of actions to be completed
 		HashMap<UUID, AbstractAction> actions = new HashMap<UUID, AbstractAction>();
+
+
+
 		// loop through each ship
 		for (AbstractObject actionable :  actionableObjects) {
 			if (actionable instanceof Ship) {
 				Ship ship = (Ship) actionable;
 				AbstractAction current = ship.getCurrentAction();
-				if (myKnolwedge == null)
+				if (globalKnowledge == null)
 				{
 					//first time its called for this ship, so initialize knolwedge
-					myKnolwedge = new KnowledgeRepresentation(space, ship);
-
-					// Set the id for this knowledge representation to this ships id
-					KR1_Id = ship.getId();
+					globalKnowledge = new KnowledgeRep2(space, ship);
+					shipOne = ship.getId();
 				}
-				/*
-				else if(myKnolwedge != null && myGlobalKnowledge == null)
-				{
-					myGlobalKnowledge = new KnowledgeRep2(space, ship);
-				}
-				*/
-				else
+				else if(globalKnowledge.myID == ship.getId())
 				{
 					// Update the KR
-					myKnolwedge.update(space, ship);
+					globalKnowledge.update(space, ship);
 				}
-				// TODO Algorithm is as follows:
-				/*
-				 * if (myKnowledge.myEnergyLevel is too low) find resources
-				 * else if (myKnowledge.enemyNear) pursue and shoot
-				 * else lie in wait for enemy ships
-				 */
-				//if(ship.getId().equals(KR1_Id))
-				if(true)
+				if (current == null || current.isMovementFinished(space))
 				{
-					if (current == null || current.isMovementFinished(space)) {
-						if (myKnolwedge.myEnergy < MIN_ENERGY) {
-							//ship.resetEnergy(); // placeholder
+					if (globalKnowledge.getMyEnergy() < MIN_ENERGY)
+					{
+						//ship.resetEnergy(); // placeholder
 
-							// Go to base
-							AbstractAction goToBase = new MoveToObjectAction(space,myKnolwedge.myPosition, myKnolwedge.myHomeBase);
-							actions.put(ship.getId(), goToBase);
-						}
-						else if (myKnolwedge.resourceNear) {
-							//pursue and shoot
-							// this is where shooting code would go
-							//AbstractAction enemyAction = new MoveToObjectAction(space, myKnolwedge.myPosition, myKnolwedge.nearestShip);
-							AbstractAction goToResource = new MoveToObjectAction(space, myKnolwedge.myPosition, myKnolwedge.nearestResource);
-							//actions.put(ship.getId(), enemyAction);
-							actions.put(ship.getId(), goToResource);
-						}
-						else {
-							//do nothing for now
-							AbstractAction moveAction = new DoNothingAction();
-							actions.put(ship.getId(), moveAction);
-						}
+						// Go to base
+						AbstractAction goToBase = new MoveToObjectAction(space, globalKnowledge.getMyShip().getPosition(), globalKnowledge.getHomeBase());
+						actions.put(ship.getId(), goToBase);
 					}
-					else {
-						actions.put(ship.getId(), ship.getCurrentAction());
+					else
+					{
+						AbstractAction goToResource = new MoveToObjectAction(space, globalKnowledge.getMyShip().getPosition(), globalKnowledge.getNearResource());
+						actions.put(ship.getId(), goToResource);
 					}
 				}
+
 				else
 				{
-					// do other actions with second rep here
+					actions.put(ship.getId(), ship.getCurrentAction());
 				}
 			}
-			else {
+			else
+			{
 				// it is a base.  Heuristically decide when to use the shield (TODO)
 				actions.put(actionable.getId(), new DoNothingAction());
 			}

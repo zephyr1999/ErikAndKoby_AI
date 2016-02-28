@@ -1,30 +1,37 @@
 package holb6595;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
+import spacesettlers.objects.AbstractActionableObject;
 import spacesettlers.objects.Asteroid;
 import spacesettlers.objects.Base;
 import spacesettlers.objects.Ship;
 import spacesettlers.simulator.Toroidal2DPhysics;
-import spacesettlers.utilities.Position;
 
 public class KnowledgeRep2
 {
 	// This knowledge representation will be for a global perspective
-	private Position myPosition;
-	private Position friendlyPosition;
+	public UUID myID;
+	private Ship myShip;
+	private Ship friendlyShip;
 	private double myEnergy;
 	private double friendlyEnergy;
 	private Base myHomeBase;
 
-	private ArrayList<Position> enemyHome = new ArrayList<Position>();
-	private ArrayList<Position> enemyBase = new ArrayList<Position>();
+	private ArrayList<Base> enemyHome = new ArrayList<Base>();
+	private ArrayList<Base> enemyBase = new ArrayList<Base>();
 
-	private ArrayList<Position> enemyLocList = new ArrayList<Position>();
+	private ArrayList<Ship> enemyShipList = new ArrayList<Ship>();
 	private ArrayList<Double> enemyEnergyList = new ArrayList<Double>();
 
-	private ArrayList<Position> resourceLocList = new ArrayList<Position>();
-	private ArrayList<Position> asteroidLocList = new ArrayList<Position>();
+	private ArrayList<Asteroid> resourceLocList = new ArrayList<Asteroid>();
+	private ArrayList<Asteroid> asteroidLocList = new ArrayList<Asteroid>();
+	private ArrayList<Asteroid> allAsteroidList = new ArrayList<Asteroid>();
+
+	private Set<AbstractActionableObject> actionableSet = new HashSet<AbstractActionableObject>();
 
 	private Ship nearestShip = null;
 	private double distanceToNearestEnemy;
@@ -34,8 +41,46 @@ public class KnowledgeRep2
 	public boolean isGlobal = true;
 	public KnowledgeRep2(Toroidal2DPhysics space, Ship ship)
 	{
+		myID = ship.getId();
+		update(space,ship);
+	}
+
+	//
+	// Accessors
+	Set<AbstractActionableObject> getActionableList()
+	{
+		return actionableSet;
+	}
+	ArrayList<Asteroid> getAllAsteroidList()
+	{
+		return allAsteroidList;
+	}
+ 	double getMyEnergy()
+	{
+		return myEnergy;
+	}
+	Ship getMyShip()
+	{
+		return myShip;
+	}
+	Asteroid getNearResource()
+	{
+		return nearestResource;
+	}
+ 	Base getHomeBase()
+	{
+		return myHomeBase;
+	}
+
+ 	// End Accessors
+
+
+ 	//
+ 	// Other Methods
+ 	void update(Toroidal2DPhysics space, Ship ship)
+	{
 		// Set my position and energy
-		myPosition = ship.getPosition();
+		myShip = ship;
 		myEnergy = ship.getEnergy();
 
 		// Set the position/energy/distance of all ships
@@ -45,13 +90,19 @@ public class KnowledgeRep2
 			// Else add it to the enemy locations
 			if(othership.getTeamName().equals(ship.getTeamName()) && !(othership.getId().equals(ship.getId())))
 			{
-				friendlyPosition = othership.getPosition();
+				// Add friendly positions to the lists
+				friendlyShip = othership;
 				friendlyEnergy = othership.getEnergy();
+				// Add friendly ship to actionable list
+				actionableSet.add(othership);
 			}
 			else
 			{
-				enemyLocList.add(othership.getPosition());
+				// Add ship to enemylist and add it's energy as well
+				enemyShipList.add(othership);
 				enemyEnergyList.add(othership.getEnergy());
+				// Add this ship to actionable objectlist as well
+				actionableSet.add(othership);
 
 				// Set which ship is the closest to our own
 				if(nearestShip == null)
@@ -73,11 +124,14 @@ public class KnowledgeRep2
 			// Set the position of the asteroids/resources
 			for(Asteroid asteroid : space.getAsteroids())
 			{
+				// No matter if the asteroid is mineable or not, add to allAsteroid list
+				allAsteroidList.add(asteroid);
+
 				// if it's mineable add it to resource list
 				// else add to asteroid list
 				if(asteroid.isMineable())
 				{
-					resourceLocList.add(asteroid.getPosition());
+					resourceLocList.add(asteroid);
 
 					// Check if this resource is the closest to our ship.
 					// If so update
@@ -97,51 +151,23 @@ public class KnowledgeRep2
 					}
 				}
 				else
-					asteroidLocList.add(asteroid.getPosition());
+					asteroidLocList.add(asteroid);
 			}
-		}
-
-		// Set positions for resources/asteroids
-		for(Asteroid asteroid : space.getAsteroids())
-		{
-			if(asteroid.isMineable())
-				resourceLocList.add(asteroid.getPosition());
-			else
-				asteroidLocList.add(asteroid.getPosition());
-
 		}
 
 		// Set base locations
 		for(Base base : space.getBases())
 		{
+			// Add base to asteroid list
+			actionableSet.add(base);
+
 			// if base is ours set ourbase loc
 			if(base.getTeamName().equals(ship.getTeamName()))
 				myHomeBase = base;
 			else if(!(base.isHomeBase()))
-				enemyHome.add(base.getPosition());
+				enemyHome.add(base);
 			else
-				enemyBase.add(base.getPosition());
+				enemyBase.add(base);
 		}
-	}
-
-
-
-
-	public Base getHomeBase()
-	{
-		return myHomeBase;
-	}
-
-
-
-	// TODO
-	private ArrayList<Position> getShipsLoc(Toroidal2DPhysics space, Ship ship)
-	{
-		Ship nearest = null;
-		for(Ship othership : space.getShips())
-		{
-			// I
-		}
-		return null;
 	}
 }
