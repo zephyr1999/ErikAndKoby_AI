@@ -7,28 +7,28 @@ import spacesettlers.utilities.Position;
 
 class Node extends AbstractObject
 {
-	public int nodeValue;
+	private int nodeGraphKey;
 
-	// Playing field coordinates: x: (0,800), y: (0,540)
-	double xmin;
-	double xmax;
-	double ymin;
-	double ymax;
-	double xcenter;
-	double ycenter;
-	boolean hasAsteroid = false;
-	boolean hasShip = false;
+	private double xmin;
+	private double xmax;
+	private double ymin;
+	private double ymax;
+	private double xcenter;
+	private double ycenter;
+	private boolean hasAsteroid = false;
+	private boolean hasShip = false;
 	private ArrayList<Edge> edges = new ArrayList<Edge>();
 	Position nodePosition;
 
-	// We might only actually need xmax/ymax to create the center points
-	Node(int node, double xmin, double xmax, double ymin, double ymax)
+	// TODO We might only actually need xmax/ymax to create the center points
+	Node(int nodeKey, double xmin, double xmax, double ymin, double ymax)
 	{
-		// TODO SUPER BIG TODO! NEED TO MANAGE HOW BIG THE RADIUS OF THIS OBJECT IS. IF ITS LARGER THAN THE NODE SIZE THIS IS A BIG PROBLEM
-		// TODO NEED TO DYNAMICALLY CREATE THE RADIUS DEPENDING ON HOW MANY NODES THERE ARE.
+		// TODO Note we need to make sure our radius is not larger than the node boundaries itself.
+		// Reference radius: Ship = 15
+		// Super(int mass, int radius);
 		super(0,5);
 
-		this.nodeValue = node;
+		this.nodeGraphKey = nodeKey;
 		this.xmin = xmin;
 		this.ymin = ymin;
 		this.xmax = xmax;
@@ -40,6 +40,9 @@ class Node extends AbstractObject
 		setPosition(nodePosition);
 	}
 
+	/**
+	 * AbstractObject interface required this method - not used
+	 */
 	@Override
 	public AbstractObject deepClone()
 	{
@@ -47,13 +50,34 @@ class Node extends AbstractObject
 		return null;
 	}
 
+	//
+	// Mutators
+	/**
+	 * Adds an edge to this node.
+	 * @param edge
+	 */
+	public void addEdge(Edge edge)
+	{
+		// First check if the edge is valid.
+		edges.add(edge);
+	}
+
+	//
+	// Accessors
+	/**
+	 * Returns the array list of edges for this node
+	 * @return
+	 */
 	public ArrayList<Edge> getEdges()
 	{
 		return edges;
 	}
-
-	public void addEdge(Edge edge)
+	/**
+	 * Returns the key that allows you to find this node in the graph
+	 * @return
+	 */
+	public int getNodeGraphKey()
 	{
-		edges.add(edge);
+		return nodeGraphKey;
 	}
 }

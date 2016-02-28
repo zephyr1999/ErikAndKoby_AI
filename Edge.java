@@ -12,6 +12,5 @@ public class Edge
 	{
 		startNode = start;
 		endNode = end;
-
 	}
 }

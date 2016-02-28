@@ -22,7 +22,7 @@ import spacesettlers.simulator.Toroidal2DPhysics;
 public class ErikAndKobyTeamClient extends TeamClient{
 
 	private static final double MIN_ENERGY = 2000;
-	private KnowledgeRep2 globalKnowledge = null;
+	private GlobalKR globalKnowledge = null;
 	private UUID shipOne;
 	private UUID shipTwo;
 
@@ -52,7 +52,7 @@ public class ErikAndKobyTeamClient extends TeamClient{
 				if (globalKnowledge == null)
 				{
 					//first time its called for this ship, so initialize knolwedge
-					globalKnowledge = new KnowledgeRep2(space, ship);
+					globalKnowledge = new GlobalKR(space, ship);
 					shipOne = ship.getId();
 				}
 				else if(globalKnowledge.myID == ship.getId())

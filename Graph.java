@@ -8,7 +8,7 @@ import java.util.Set;
 import spacesettlers.objects.AbstractActionableObject;
 import spacesettlers.objects.AbstractObject;
 import spacesettlers.objects.Asteroid;
-import spacesettlers.simulator.Toroidal2DPhysics;
+import spacesettlers.utilities.Position;
 
 
 /**
@@ -20,335 +20,486 @@ class Graph
 {
 	// Koby wrote this while drinking and thinking aloud!
 
-	// Variables of playing field
-		// Variables holding the coordinates of the playing. Origin is NW of screen.
-	private double xmin = 0.0; // west
-	private double xmax = 800.0; // east
-	private double ymin = 0.0; // north
-	private double ymax = 540.0; // south
-	private double totalArea = xmax * ymax;
+	/**
+	 * Coordinates of playing field.
+	 * xmin = west most
+	 */
+	private double xmin = 0.0;
 
-	// Variables of nodes
-	private double domain = 0;
-	private double nodeArea = 0;
+	/**
+	 * Coordinates of playing field.
+	 * xmax = east most
+	 */
+	private double xmax = 800.0;
 
-	// HashMap of non-valid node values
-	Map<Integer, Boolean> nonValid = new HashMap<Integer, Boolean>();
+	/**
+	 * Coordinates of playing field.
+	 * ymin = north most
+	 */
+	private double ymin = 0.0;
 
-	// To create a gridded graph, divide each part of the map evenly into squares. (Called nodes)
-	// However large the nodeAmount is, will determine how many "boxes" the map will be cut into.
-	// TODO if nodeamount doesn't divide evenly we havea big problem
+	/**
+	 * Coordinates of playing field.
+	 * ymax = south most
+	 */
+	private double ymax = 540.0;
+
+	/**
+	 * 	We pass in an integer value 'divisions' to determine how many squares we want to create.
+	 *	Divisions = #ofColumns and #ofRows
+	 */
 	private int nodeDivisions = 0;
-	private int nodeAmount = 0;
 
-	// TODO For now I'm storing the graph in an array list that holds the nodes.
-	// First of all, how am I going to store the edges? - likely just hold a list on each node of the connecting edges
-	// Second, is holding the graph in an arraylist the best way to do this? Likely more optimal way
+	/**
+	 * Total Nodes will be created based on divisions.
+	 * Total Nodes = nodeDivisions*nodeDivisions
+	 */
+	private int totalNodes = 0;
+
+	/**
+	 * Pass in the target position to find the node it lies in.
+	 */
+	Position targetPosition;
+
+	/**
+	 * Value will hold startNode when found.
+	 */
+	private Node startNode;
+
+	/**
+	 * Value will hold endNode when found.
+	 */
+	private Node targetNode;
+
+	/**
+	 * Global Knowledge Representation we'll use.
+	 */
+	private GlobalKR globalKnowledge;
+
+	/**
+	 * Graph that holds all nodes.
+	 * Stored as a hashmap.
+	 * Integer values from 0-(totalNodes-1)
+	 * Non-valid nodes not stored here.
+	 */
 	private Map<Integer, Node> graph = new HashMap<Integer, Node>();
-	Toroidal2DPhysics space;
-	KnowledgeRep2 globalKnowledge;
-	Graph(Toroidal2DPhysics space, int nodes, KnowledgeRep2 globalKnowledge)
+
+	Graph(GlobalKR globalKnowledge, Position target, int divisions)
 	{
-		this.space = space;
-		this.nodeDivisions = nodes;
-		this.nodeAmount = nodeDivisions*nodeDivisions;
+		this.nodeDivisions = divisions;
+		this.totalNodes = nodeDivisions*nodeDivisions;
 		this.globalKnowledge = globalKnowledge;
+		this.targetPosition = target;
 
 		// Find the x and y domains that each node will have.
+		// xdomain = distance from left boundary to right boundary (for a single node)
+		// ydomain = distance from top boundary to bottom boundary (for a single node)
 		double xdomain = xmax/(nodeDivisions*nodeDivisions);
 		double ydomain = ymax/(nodeDivisions*nodeDivisions);
-		// TODO eliminate double nodeArea = totalArea/nodeAmount;
-		// TODO eliminate double domain = Math.sqrt(nodeArea);
 
-		// Now we have the amount of nodes we want to cut the map into, divide evenly.
-		// Start from totalArea 0.0,0.0
+
+		// Now we have the amount of nodes we want to cut the map into. Create that many nodes
+
+		// Start from origin (0.0,0.0)
 		double xstart = xmin;
 		double ystart = ymin;
-		// TODO NEED TO CONSIDER ROUNDING ERRORS. WHEN CHECKING WHICH BOX WE SHOULD PROBABLY FLOOR OR CEILING THE NODES
-		for(int nodeValue = 0; nodeValue < nodeAmount; nodeValue++)
+
+		// Loop through every potential node. Create and add them to the graph.
+		for(int currentNodeGraphKey = 0; currentNodeGraphKey < totalNodes; currentNodeGraphKey++)
 		{
 			double xfinish = xdomain + xstart;
 			double yfinish = ydomain + ystart;
 
-			// First check if this node has an asteroid or a ship or base.
-			// If not, continue;
-			if(checkSpace(space, xstart, xfinish, ystart, yfinish))
+			// First check the content of the node.
+			// If checkNodeContent = 0: node is empty, create node, add to graph
+			// If checkNodeContent = 1: node is start, create node, add to graph
+			// If checkNodeContent = 2: node is target, create node, add to graph
+			// If checkNodeContent = 3: node is start and target, NO NEED TO SEARCH. JUST A SIMPLE MOVE TO EXACT TARGET COORDINATE
+			// If checkNodeContent = -1: node is obstructed, don't create node
+			int nodeContent = checkNodeContent(xstart, xfinish, ystart, yfinish);
+
+			if(nodeContent == 0)
 			{
-				if(((nodeAmount%nodeDivisions) +1) == 0)
+				if(((totalNodes%nodeDivisions) +1) == 0)
 				{
-					Node currentNode = new Node(nodeValue, xstart, xfinish, ystart, yfinish);
-					graph.put(nodeValue, currentNode);
+					// This node is on the far right. Create, add
+					Node currentNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, currentNode);
 
 					// update coordinates
+					// At the end increment the xstart to the xorigin, ystart down 1 ydomain
 					xstart = xmin;
 					ystart += ydomain;
 				}
 				else
 				{
-					Node currentNode = new Node(nodeValue, xstart, xfinish, ystart, yfinish);
-					graph.put(nodeValue, currentNode);
+					// This node is not on the far right yet. Create, add
+					Node currentNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, currentNode);
+
 					// update coordinates
+					// ystart stays pat, xstart incremented to the right by 1 xdomain
 					xstart += xdomain;
 				}
 			}
+			else if(nodeContent == 1)
+			{
+				if(((totalNodes%nodeDivisions) +1) == 0)
+				{
+					// This node is on the far right. Create, add
+					// Also, this is the startNode
+					startNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, startNode);
+
+					// update coordinates
+					// At the end increment the xstart to the xorigin, ystart down 1 ydomain
+					xstart = xmin;
+					ystart += ydomain;
+				}
+				else
+				{
+					// This node is not on the far right yet. Create, add
+					// Also, this is the startNode
+					Node startNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, startNode);
+
+					// update coordinates
+					// ystart stays pat, xstart incremented to the right by 1 xdomain
+					xstart += xdomain;
+				}
+			}
+			else if(nodeContent == 2)
+			{
+				if(((totalNodes%nodeDivisions) +1) == 0)
+				{
+					// This node is on the far right. Create, add
+					// Also, this is the targetNode
+					targetNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, targetNode);
+
+					// update coordinates
+					// At the end increment the xstart to the xorigin, ystart down 1 ydomain
+					xstart = xmin;
+					ystart += ydomain;
+				}
+				else
+				{
+					// This node is not on the far right yet. Create, add
+					// Also, this is the targetNode
+					Node targetNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
+					graph.put(currentNodeGraphKey, targetNode);
+
+					// update coordinates
+					// ystart stays pat, xstart incremented to the right by 1 xdomain
+					xstart += xdomain;
+				}
+			}
+			else if(nodeContent == 3)
+			{
+				// start AND target node
+				// if this happens we need to quit this somehow
+				// shouldn't call astar
+				// just make simple action to targets position
+			}
 			else
 			{
-				nonValid.put(nodeValue, true);
+				// Node is Obstructed. Do nothing.
 			}
+		}
 
-			// Now that the nodes have been created, attach each edge to each node
-			for(int node = 0; node < nodeAmount; node++)
+		// Now that the nodes have been created, attach each edge to each node
+		for(int currentNodeGraphKey = 0; currentNodeGraphKey < totalNodes; currentNodeGraphKey++)
+		{
+			// This is the current node we are going to add edges to.
+			// CurrentNodeGraphKey is just the key that is used to map the node to the hashmap.
+			Node currentNode = graph.get(currentNodeGraphKey);
+			if(currentNodeGraphKey >= 0 && currentNodeGraphKey < nodeDivisions)
 			{
-				boolean top = false;
-				boolean left = false;
-				boolean right = false;
-				boolean bottom = false;
-
-				if(node >= 0 && node < nodeDivisions) // top row
+				if(currentNodeGraphKey%nodeDivisions == 0)
 				{
-					top = true;
-					if(node%nodeDivisions == 0) // top,left row
-					{
-						left = true;
-						addEdges(graph.get(node), 0, 0);
-					}
-					else if((node+1)%nodeDivisions == 0) // top,right row
-					{
-						right = true;
-						addEdges(graph.get(node), 0, 1);
-					}
-					else // top,middle row
-					{
-						addTBMidEdges(graph.get(node), 0);
-					}
+					// Case: Special. Top Left corner node
+					// Node is on top row, left column.
+					if(isNodeValid(currentNodeGraphKey+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 									// East
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions+1))); 					// SE
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions))); 						// South
+					if(isNodeValid((2*nodeDivisions)-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get((2*nodeDivisions)-1))); 									// SW
+					if(isNodeValid(nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(nodeDivisions-1))); 										// West
+					if(isNodeValid(totalNodes-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-1))); 											// NW
+					if(isNodeValid(totalNodes-nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-nodeDivisions))); 								// North
+					if(isNodeValid(totalNodes-nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-nodeDivisions+1))); 								// NE
 				}
-				else if(node >= (nodeAmount-nodeDivisions) && node < (nodeAmount)) // bottom row
+				else if((currentNodeGraphKey+1)%nodeDivisions == 0)
 				{
-					bottom = true;
-					if(node%nodeDivisions == 0) // bottom,left row
-					{
-						left = true;
-						addEdges(graph.get(node), 1, 0);
-					}
-					else if((node+1)%nodeDivisions == 0) // bottom,right row
-					{
-						right = true;
-						addEdges(graph.get(node), 1, 1);
-					}
-					else // bottom,middle row
-					{
-						addTBMidEdges(graph.get(node), 1);
-					}
+					// Case: Special. Top right corner node
+					// Node is on top row, right column
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions))); 						// South
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions-1))); 					// SW
+					if(isNodeValid(currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 									// West
+					if(isNodeValid(totalNodes-2))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-2))); 											// NW
+					if(isNodeValid(totalNodes-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-1))); 											// North
+					if(isNodeValid(totalNodes-nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-nodeDivisions))); 								// NE
+					if(isNodeValid(0))
+						currentNode.addEdge(new Edge(currentNode, graph.get(0))); 														// East
+					if(isNodeValid(currentNodeGraphKey+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 									// SE
 				}
-				else if(node%nodeDivisions == 0) // Left row
+				else
 				{
-
+					// Case: Top row only
+					// Node is on top row, but not a corner node.
+					if(isNodeValid((totalNodes-nodeDivisions)+currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get((totalNodes-nodeDivisions)+currentNodeGraphKey-1)));		// NW
+					if(isNodeValid((totalNodes-nodeDivisions)+currentNodeGraphKey+2))
+						currentNode.addEdge(new Edge(currentNode, graph.get((totalNodes-nodeDivisions)+currentNodeGraphKey+2)));		// NE
+					if(isNodeValid((totalNodes-nodeDivisions)+currentNodeGraphKey))
+						currentNode.addEdge(new Edge(currentNode, graph.get((totalNodes-nodeDivisions)+currentNodeGraphKey)));			// North
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions)));						// South
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions+1)));						// SE
+					if(isNodeValid(currentNodeGraphKey+nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions-1))); 					// SW
+					if(isNodeValid(currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 									// West
+					if(isNodeValid(currentNodeGraphKey+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 									// East
 				}
-				else if((node+1)%nodeDivisions == 0)
-				{
 
+			}
+			else if(currentNodeGraphKey >= (totalNodes-nodeDivisions) && currentNodeGraphKey < (totalNodes))
+			{
+				if(currentNodeGraphKey%nodeDivisions == 0)
+				{
+					// Case: Special. Bottom Left corner node
+					// Node is on bottom row, left column.
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 						// North
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions+1))); 					// NE
+					if(isNodeValid(currentNodeGraphKey+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 									// East
+					if(isNodeValid(1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(1))); 														// SE
+					if(isNodeValid(0))
+						currentNode.addEdge(new Edge(currentNode, graph.get(0))); 														// South
+					if(isNodeValid(nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(nodeDivisions-1))); 										// SW
+					if(isNodeValid(totalNodes-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(totalNodes-1))); 											// West
+					if(isNodeValid(currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 									// NW
+				}
+				else if((currentNodeGraphKey+1)%nodeDivisions == 0)
+				{
+					// Case: Special. Bottom Right corner node
+					// Node is on bottom row, right column.
+					if(isNodeValid(currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 									// West
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions-1))); 					// NW
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 						// North
+					if(isNodeValid(currentNodeGraphKey-(2*nodeDivisions)+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-(2*nodeDivisions)+1))); 				// NE
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions+1))); 					// East
+					if(isNodeValid(0))
+						currentNode.addEdge(new Edge(currentNode, graph.get(0))); 														// SE
+					if(isNodeValid(nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(nodeDivisions-1))); 										// South
+					if(isNodeValid(nodeDivisions-2))
+						currentNode.addEdge(new Edge(currentNode, graph.get(nodeDivisions-2))); 										// SW
+				}
+				else
+				{
+					// Case: Bottom row only
+					// Node is on bottom row, but not a corner node.
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 						// North
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions+1))); 					// NE
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions-1))); 					// NW
+					if(isNodeValid(currentNodeGraphKey-nodeDivisions*(nodeDivisions-1)))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions*(nodeDivisions-1)))); 	// South
+					if(isNodeValid((currentNodeGraphKey-nodeDivisions*(nodeDivisions-1))+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey-nodeDivisions*(nodeDivisions-1))+1)));	// SE
+					if(isNodeValid((currentNodeGraphKey-nodeDivisions*(nodeDivisions-1))-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey-nodeDivisions*(nodeDivisions-1))-1))); // SW
+					if(isNodeValid(currentNodeGraphKey-1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 									// West
+					if(isNodeValid(currentNodeGraphKey+1))
+						currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 									// East
 				}
 			}
+			else if(currentNodeGraphKey%nodeDivisions == 0)
+			{
+				// Case: Left column only
+				// Node is on leftmost column, but not a corner node.
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions-1))); 						// West
+				if(isNodeValid(currentNodeGraphKey-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 			   							// NW
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions+1))); 						// NE
+				if(isNodeValid(currentNodeGraphKey+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 			   							// East
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions+1))); 						// SE
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions)));							// South
+				if(isNodeValid(currentNodeGraphKey+(2*nodeDivisions)-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+(2*nodeDivisions)-1)));  					// SW
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 							// North
+			}
+			else if((currentNodeGraphKey+1)%nodeDivisions == 0)
+			{
+				// Case: Right column only
+				// Node is on rightmost column, but not a corner node.
+				if(isNodeValid(currentNodeGraphKey-(2*nodeDivisions)+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-(2*nodeDivisions)+1))); 					// NE
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions+1))); 						// East
+				if(isNodeValid(currentNodeGraphKey+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 										// SE
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions))); 							// South
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions-1))); 						// SW
+				if(isNodeValid(currentNodeGraphKey-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 										// West
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions-1))); 						// NW
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 							// North
+			}
+			else
+			{
+				// Case: Simple
+				// If node not on the outer edge of game screen
+				if(isNodeValid(currentNodeGraphKey-nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-nodeDivisions))); 							// North
+				if(isNodeValid((currentNodeGraphKey-nodeDivisions)+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey-nodeDivisions)+1))); 						// NE
+				if(isNodeValid((currentNodeGraphKey-nodeDivisions)-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey-nodeDivisions)-1))); 						// NW
+				if(isNodeValid(currentNodeGraphKey+nodeDivisions))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+nodeDivisions))); 							// South
+				if(isNodeValid((currentNodeGraphKey+nodeDivisions)+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey+nodeDivisions)+1))); 						// SE
+				if(isNodeValid((currentNodeGraphKey+nodeDivisions)-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get((currentNodeGraphKey+nodeDivisions)-1))); 						// SW
+				if(isNodeValid(currentNodeGraphKey+1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey+1))); 										// East
+				if(isNodeValid(currentNodeGraphKey-1))
+					currentNode.addEdge(new Edge(currentNode, graph.get(currentNodeGraphKey-1))); 										// West
+			}
 		}
+
 	}
-	private void addEdges(Node node) // Simple case
+
+	/**
+	 * Returns the start node
+	 * @return
+	 */
+	public Node getStartNode()
 	{
-		int currentValue = node.nodeValue;
-		// Call this if it is not an edge case
-		node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-		node.addEdge(new Edge(node, graph.get((currentValue-nodeDivisions)+1))); // NE
-		node.addEdge(new Edge(node, graph.get((currentValue-nodeDivisions)-1))); // NW
-		node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions))); // South
-		node.addEdge(new Edge(node, graph.get((currentValue+nodeDivisions)+1))); // SE
-		node.addEdge(new Edge(node, graph.get((currentValue+nodeDivisions)-1))); // SW
-		node.addEdge(new Edge(node, graph.get(currentValue+1))); // East
-		node.addEdge(new Edge(node, graph.get(currentValue-1))); // West
+		return startNode;
 	}
-	private void addTBMidEdges(Node node, int tb)
+
+	/**
+	 * Returns the target node
+	 * @return
+	 */
+	public Node getTargetNode()
 	{
-		int currentValue = node.nodeValue;
-		// top = 0, bottom = 1
-		// Call this if it is an edge,middle case
-		if(tb == 0)
-		{
-			node.addEdge(new Edge(node, graph.get((nodeAmount-nodeDivisions)+currentValue-1)));	// Nw
-			node.addEdge(new Edge(node, graph.get((nodeAmount-nodeDivisions)+currentValue+2)));	// NE
-			node.addEdge(new Edge(node, graph.get((nodeAmount-nodeDivisions)+currentValue)));	// North
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions)));	// South
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions+1)));	// SE
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions-1))); // SW
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // West
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // East
-		}
+		return targetNode;
+	}
+
+	/**
+	 * Takes a potential node and it's coordinates.
+	 * return 3 if both your ship and your target are in this node
+	 * return 2 if you target is in this node
+	 * return 1 if your ship is in this node
+	 * return 0 if this node is clear of obstructions
+	 * return -1 if any other obstruction is in this node
+	 * @param space
+	 * @param xstart
+	 * @param xfinish
+	 * @param ystart
+	 * @param yfinish
+	 * @return
+	 */
+	private int checkNodeContent(double xstart, double xfinish, double ystart, double yfinish)
+	{
+		// 1. Check if your ship is inside of this nodes boundary. If so, goto 2, else goto 3.
+		// 2. Check if your target is inside of this nodes boundary. If so, return 3, else return 1.
+		// 3. Check if your target is inside of this nodes boundary. If so, return 2, else goto 4.
+		// 4. Check if any other obstruction is in this nodes boundary. If so, return -1, else goto 5.
+		// 5. Nothing occupies this nodes boundaries. return 0.
+
+		double shipX = globalKnowledge.getMyShip().getPosition().getX();
+		double shipY = globalKnowledge.getMyShip().getPosition().getY();
+		double targetX = targetPosition.getX();
+		double targetY = targetPosition.getY();
+
+		boolean hasMyShip = false;
+		boolean hasMyTarget = false;
+
+		if((shipX >= xstart) && (shipX < xfinish) && (shipY >= ystart) && (shipY < yfinish)) hasMyShip = true;				// Check if ships contained
+		if((targetX >= xstart) && (targetX < xfinish) && (targetY >= ystart) && (targetY < yfinish)) hasMyTarget = true;	// Check if target contained
+		if(hasMyShip == true && hasMyTarget == true) return 3;																// Both ship & target.  return 3
+		else if(hasMyShip == true && hasMyTarget == false) return 1;														// Only ship.			return 1
+		else if(hasMyShip == false && hasMyTarget == true) return 2;														// Only target.			return 2
 		else
 		{
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions+1))); // NE
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions-1))); // NW
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions*(nodeDivisions-1)))); // South
-			node.addEdge(new Edge(node, graph.get((currentValue-nodeDivisions*(nodeDivisions-1))+1)));	// SE
-			node.addEdge(new Edge(node, graph.get((currentValue-nodeDivisions*(nodeDivisions-1))-1))); // SW
-			node.addEdge(new Edge(node, graph.get((currentValue-1)))); // West
-			node.addEdge(new Edge(node, graph.get((currentValue+1)))); // East
-		}
-	}
-	private void addLRMidEdges(Node node, int lr)
-	{
-		int currentValue = node.nodeValue;
-		if(lr == 0)
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions-1))); // West
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // NW
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions+1))); // NE
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // East
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions+1))); // SE
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions))); // South
-			node.addEdge(new Edge(node, graph.get(currentValue+(2*nodeDivisions)-1))); // SW
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-		}
-		else
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue-(2*nodeDivisions)+1))); // NE
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions+1))); // East
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // SE
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions))); // South
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions-1))); // SW
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // West
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions-1))); // NW
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-		}
-	}
-	private void addEdges(Node node, int tb, int lr)
-	{
-		int currentValue = node.nodeValue;
-		// top-left = 0, bottom-right = 0
-		// Call this if it is an edge,edge case
-		if(tb == 0 && lr == 0)
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // East
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions+1))); // SE
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions))); // South
-			node.addEdge(new Edge(node, graph.get((2*nodeDivisions)-1))); // SW
-			node.addEdge(new Edge(node, graph.get(nodeDivisions-1))); // West
-			node.addEdge(new Edge(node, graph.get(nodeAmount-1))); // NW
-			node.addEdge(new Edge(node, graph.get((nodeAmount-nodeDivisions)))); // North
-			node.addEdge(new Edge(node, graph.get(nodeAmount-nodeDivisions+1))); // NE
-		}
-		else if(tb == 0 && lr == 1)
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions))); // South
-			node.addEdge(new Edge(node, graph.get(currentValue+nodeDivisions-1))); // SW
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // West
-			node.addEdge(new Edge(node, graph.get(nodeAmount-2))); // Northwest
-			node.addEdge(new Edge(node, graph.get(nodeAmount-1))); // North
-			node.addEdge(new Edge(node, graph.get(nodeAmount-nodeDivisions))); // NE
-			node.addEdge(new Edge(node, graph.get(0))); // East
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // SE
-		}
-		else if(tb == 1 && lr == 0)
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions+1))); // NE
-			node.addEdge(new Edge(node, graph.get(currentValue+1))); // East
-			node.addEdge(new Edge(node, graph.get(1))); // SE
-			node.addEdge(new Edge(node, graph.get(0))); // S
-			node.addEdge(new Edge(node, graph.get(nodeDivisions-1))); // SW
-			node.addEdge(new Edge(node, graph.get(nodeAmount-1))); // West
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // NW
-		}
-		else if(tb == 1 && lr == 1)
-		{
-			node.addEdge(new Edge(node, graph.get(currentValue-1))); // West
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions-1))); // NW
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions))); // North
-			node.addEdge(new Edge(node, graph.get(currentValue-(2*nodeDivisions)+1))); // NE
-			node.addEdge(new Edge(node, graph.get(currentValue-nodeDivisions+1))); // East
-			node.addEdge(new Edge(node, graph.get(0))); // SE
-			node.addEdge(new Edge(node, graph.get(nodeDivisions-1))); // South
-			node.addEdge(new Edge(node, graph.get(nodeDivisions-2))); // SW
+			ArrayList<Asteroid> allAsteroidList = globalKnowledge.getAllAsteroidList();
+			for(Asteroid asteroid : allAsteroidList)
+			{
+				double xPos = asteroid.getPosition().getX();
+				double yPos = asteroid.getPosition().getY();
+
+				if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
+			}
+
+			Set<AbstractActionableObject> actionableList = globalKnowledge.getActionableList();
+			for(AbstractObject actionable : actionableList)
+			{
+				double xPos = actionable.getPosition().getX();
+				double yPos = actionable.getPosition().getY();
+
+				if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
+			}
+
+			return 0;																										// Empty node.			return 0
 		}
 	}
 
-	private boolean checkSpace(Toroidal2DPhysics space, double xstart, double xfinish, double ystart, double yfinish)
+	/**
+	 * When checking if a node is valid, pass in its graph search key.
+	 * If that graph search key returns null, it isn't in the map. return false
+	 * Otherwise, return true
+	 * @param currentGraphSearchKey
+	 * @return
+	 */
+	private boolean isNodeValid(int currentGraphSearchKey)
 	{
-		// If there is something inside of the bounds of the certain node, return false so that this node will not be added
-		// to the search graph. Otherwise return true and add it to the search graph.
-		ArrayList<Asteroid> allAsteroidList = globalKnowledge.getAllAsteroidList();
-		for(Asteroid asteroid : allAsteroidList)
-		{
-			double xPos = asteroid.getPosition().getX();
-			double yPos = asteroid.getPosition().getY();
-
-			if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return false;
-		}
-
-		Set<AbstractActionableObject> actionableList = globalKnowledge.getActionableList();
-		for(AbstractObject actionable : actionableList)
-		{
-			double xPos = actionable.getPosition().getX();
-			double yPos = actionable.getPosition().getY();
-
-			if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return false;
-		}
-
-		return true;
-	}
-	private void astar(Node start, Node goal)
-	{
-		// TODO
-
-		/*
-		function A*(start, goal)
-	    // The set of nodes already evaluated.
-	    closedSet := {}
-	    // The set of currently discovered nodes still to be evaluated.
-	    // Initially, only the start node is known.
-	    openSet := {start}
-	    // For each node, which node it can most efficient be reach from.
-	    // If a node can be reached from many nodes, cameFrom will eventually contain the
-	    // most efficient previous step.
-	    cameFrom := the empty map
-
-	    // For each node, the cost of getting from the start node to that node.
-	    gScore := map with default value of Infinity
-	    // The cost of going from start to start is zero.
-	    gScore[start] := 0
-	    // For each node, the total cost of getting from the start node to the goal
-	    // by passing by that node. That value is partly known, partly heuristic.
-	    fScore := map with default value of Infinity
-	    // For the first node, that value is completely heuristic.
-	    fScore[start] := heuristic_cost_estimate(start, goal)
-
-	    while openSet is not empty
-	        current := the node in openSet having the lowest fScore[] value
-	        if current = goal
-	            return reconstruct_path(cameFrom, goal)
-
-	        openSet.Remove(current)
-	        closedSet.Add(current)
-	        for each neighbor of current
-	            if neighbor in closedSet
-	                continue		// Ignore the neighbor which is already evaluated.
-	            // The distance from start to goal passing through current and the neighbor.
-	            tentative_gScore := gScore[current] + dist_between(current, neighbor)
-	            if neighbor not in openSet	// Discover a new node
-	                openSet.Add(neighbor)
-	            else if tentative_gScore >= gScore[neighbor]
-	                continue		// This is not a better path.
-
-	            // This path is the best until now. Record it!
-	            cameFrom[neighbor] := current
-	            gScore[neighbor] := tentative_gScore
-	            fScore[neighbor] := gScore[neighbor] + heuristic_cost_estimate(neighbor, goal)
-
-	    return failure
-
-	function reconstruct_path(cameFrom, current)
-	    total_path := [current]
-	    while current in cameFrom.Keys:
-	        current := cameFrom[current]
-	        total_path.append(current)
-	    return total_path
-	    		*/
+		if(graph.get(currentGraphSearchKey) == null) return false;
+		else return true;
 	}
 }
