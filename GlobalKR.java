@@ -5,9 +5,11 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import spacesettlers.actions.AbstractAction;
 import spacesettlers.objects.AbstractActionableObject;
 import spacesettlers.objects.Asteroid;
 import spacesettlers.objects.Base;
+import spacesettlers.objects.Beacon;
 import spacesettlers.objects.Ship;
 import spacesettlers.simulator.Toroidal2DPhysics;
 
@@ -30,17 +32,24 @@ public class GlobalKR
 	private ArrayList<Asteroid> resourceLocList = new ArrayList<Asteroid>();
 	private ArrayList<Asteroid> asteroidLocList = new ArrayList<Asteroid>();
 	private ArrayList<Asteroid> allAsteroidList = new ArrayList<Asteroid>();
-
+	private ArrayList<Beacon> beaconList = new ArrayList<Beacon>();
 	private Set<AbstractActionableObject> actionableSet = new HashSet<AbstractActionableObject>();
 
 	private Ship nearestShip = null;
 	private double distanceToNearestEnemy;
 	private Asteroid nearestResource = null;
 	private double distanceToNearResource;
+	private Beacon nearestBeacon;
+	private double distanceToNearBeacon;
+	private final double MIN_BASE_DIST = 20;
+
+	Toroidal2DPhysics mySpace;
 
 	public boolean isGlobal = true;
+	public ArrayList<AbstractAction> nextMoves = new ArrayList<AbstractAction>();
 	public GlobalKR(Toroidal2DPhysics space, Ship ship)
 	{
+		mySpace = space;
 		myID = ship.getId();
 		update(space,ship);
 	}
@@ -155,6 +164,31 @@ public class GlobalKR
 			}
 		}
 
+		// Set the position of the beacons
+		for(Beacon beacon : space.getBeacons())
+		{ // TODO BEACON
+			// add beacon to beacon list
+			beaconList.add(beacon);
+
+
+			// Check if this beacon is the closest to our ship.
+			// If so update
+			if(nearestBeacon == null)
+			{
+				nearestBeacon = beacon;
+				distanceToNearResource = space.findShortestDistance(ship.getPosition(), beacon.getPosition());
+			}
+			else
+			{
+				double distance = space.findShortestDistance(ship.getPosition(), beacon.getPosition());
+				if(distance < distanceToNearResource)
+				{
+					nearestBeacon = beacon;
+					distanceToNearResource = distance;
+				}
+			}
+		}
+
 		// Set base locations
 		for(Base base : space.getBases())
 		{
@@ -169,5 +203,35 @@ public class GlobalKR
 			else
 				enemyBase.add(base);
 		}
+	}
+
+	public boolean hasNextMove() {
+		return nextMoves.size() > 0;
+	}
+
+	public AbstractAction nextMove() {
+		AbstractAction move = nextMoves.get(0);
+		nextMoves.remove(0);
+		return move;
+	}
+
+	public void putMove(AbstractAction move) {
+		nextMoves.add(move);
+
+	}
+
+	public boolean nextToBase()
+	{
+		return mySpace.findShortestDistance(myShip.getPosition(), myHomeBase.getPosition()) < MIN_BASE_DIST;
+	}
+
+	public void clearNextMoves()
+	{
+		nextMoves.clear();
+	}
+
+	public Beacon getNearBeacon()
+	{
+		return nearestBeacon;
 	}
 }

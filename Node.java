@@ -17,16 +17,22 @@ class Node extends AbstractObject
 	private double ycenter;
 	private boolean hasAsteroid = false;
 	private boolean hasShip = false;
+	private Node parent = null;
 	private ArrayList<Edge> edges = new ArrayList<Edge>();
 	Position nodePosition;
 
+
+	Node()
+	{
+		super(10,10);
+	}
 	// TODO We might only actually need xmax/ymax to create the center points
 	Node(int nodeKey, double xmin, double xmax, double ymin, double ymax)
 	{
 		// TODO Note we need to make sure our radius is not larger than the node boundaries itself.
 		// Reference radius: Ship = 15
 		// Super(int mass, int radius);
-		super(0,5);
+		super(0,10);
 
 		this.nodeGraphKey = nodeKey;
 		this.xmin = xmin;
@@ -80,4 +86,44 @@ class Node extends AbstractObject
 	{
 		return nodeGraphKey;
 	}
+
+	/**
+	 * @return a list of all children nodes
+	 */
+	public ArrayList<Node> getChildren() {
+		ArrayList<Node> children = new ArrayList<Node>();
+
+		if(edges.size() > 0)
+		{
+				for (Edge e : edges) {
+				children.add(e.getEndNode());
+			}
+		}
+
+		return children;
+	}
+
+	public double getXCenter() {
+		return xcenter;
+	}
+
+	public double getYCenter() {
+		return ycenter;
+	}
+
+	public void setParent(Node nextNode) {
+		parent = nextNode;
+
+	}
+
+	public Node getParent() {
+		// TODO Auto-generated method stub
+		return parent;
+	}
+
+	public boolean hasChildren()
+	{
+		return edges.isEmpty();
+	}
 }
+

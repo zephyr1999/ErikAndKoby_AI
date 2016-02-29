@@ -31,6 +31,7 @@ class Graph
 	 * xmax = east most
 	 */
 	private double xmax = 800.0;
+	//private double xmax = 1230;
 
 	/**
 	 * Coordinates of playing field.
@@ -43,6 +44,7 @@ class Graph
 	 * ymax = south most
 	 */
 	private double ymax = 540.0;
+//	private double ymax = 750.0;
 
 	/**
 	 * 	We pass in an integer value 'divisions' to determine how many squares we want to create.
@@ -64,12 +66,12 @@ class Graph
 	/**
 	 * Value will hold startNode when found.
 	 */
-	private Node startNode;
+	private Node startNode = null;
 
 	/**
 	 * Value will hold endNode when found.
 	 */
-	private Node targetNode;
+	private Node targetNode = null;
 
 	/**
 	 * Global Knowledge Representation we'll use.
@@ -84,6 +86,11 @@ class Graph
 	 */
 	private Map<Integer, Node> graph = new HashMap<Integer, Node>();
 
+	/**
+	 * Boolean indicating start and finish are the same node. should be checked during aStar.
+	 */
+	private Boolean startAndFinishAreSame = false;
+
 	Graph(GlobalKR globalKnowledge, Position target, int divisions)
 	{
 		this.nodeDivisions = divisions;
@@ -94,9 +101,25 @@ class Graph
 		// Find the x and y domains that each node will have.
 		// xdomain = distance from left boundary to right boundary (for a single node)
 		// ydomain = distance from top boundary to bottom boundary (for a single node)
-		double xdomain = xmax/(nodeDivisions*nodeDivisions);
-		double ydomain = ymax/(nodeDivisions*nodeDivisions);
+		double xdomain = xmax/nodeDivisions;
+		double ydomain = ymax/nodeDivisions;
 
+		int startID =  (divisions * (int)Math.floor(globalKnowledge.getMyShip().getPosition().getY()/ydomain)) + (int)Math.floor(globalKnowledge.getMyShip().getPosition().getX() / xdomain);
+		double startX = Math.floor(globalKnowledge.getMyShip().getPosition().getX() / xdomain) * xdomain;
+		double endX = startX + xdomain;
+		double startY = Math.floor(globalKnowledge.getMyShip().getPosition().getY() / ydomain) * ydomain;
+		double endY = startY + ydomain;
+		startNode = new Node(startID, startX, endX, startY, endY);
+		graph.put(startID, startNode);
+
+		int targetID =  (divisions * (int)Math.floor(globalKnowledge.getMyShip().getPosition().getY()/ydomain)) + (int)Math.floor(globalKnowledge.getMyShip().getPosition().getX() / xdomain);
+		startX = Math.floor(targetPosition.getX() / xdomain) * xdomain;
+		endX = startX + xdomain;
+		startY = Math.floor(targetPosition.getY() / ydomain) * ydomain;
+		endY = startY + ydomain;
+		targetNode = new Node(targetID, startX, endX, startY, endY);
+		graph.put(targetID, targetNode);
+		if(targetID == startID) startAndFinishAreSame = true;
 
 		// Now we have the amount of nodes we want to cut the map into. Create that many nodes
 
@@ -107,6 +130,8 @@ class Graph
 		// Loop through every potential node. Create and add them to the graph.
 		for(int currentNodeGraphKey = 0; currentNodeGraphKey < totalNodes; currentNodeGraphKey++)
 		{
+			if(currentNodeGraphKey == targetID || currentNodeGraphKey == startID) continue;
+
 			double xfinish = xdomain + xstart;
 			double yfinish = ydomain + ystart;
 
@@ -120,7 +145,7 @@ class Graph
 
 			if(nodeContent == 0)
 			{
-				if(((totalNodes%nodeDivisions) +1) == 0)
+				if((((currentNodeGraphKey+1)%nodeDivisions)) == 0)
 				{
 					// This node is on the far right. Create, add
 					Node currentNode = new Node(currentNodeGraphKey, xstart, xfinish, ystart, yfinish);
@@ -144,7 +169,8 @@ class Graph
 			}
 			else if(nodeContent == 1)
 			{
-				if(((totalNodes%nodeDivisions) +1) == 0)
+				System.out.println("start");
+				if((((currentNodeGraphKey+1)%nodeDivisions)) == 0)
 				{
 					// This node is on the far right. Create, add
 					// Also, this is the startNode
@@ -170,7 +196,8 @@ class Graph
 			}
 			else if(nodeContent == 2)
 			{
-				if(((totalNodes%nodeDivisions) +1) == 0)
+				System.out.println("target");
+				if((((currentNodeGraphKey+1)%nodeDivisions)) == 0)
 				{
 					// This node is on the far right. Create, add
 					// Also, this is the targetNode
@@ -200,6 +227,7 @@ class Graph
 				// if this happens we need to quit this somehow
 				// shouldn't call astar
 				// just make simple action to targets position
+				startAndFinishAreSame = true;
 			}
 			else
 			{
@@ -208,7 +236,7 @@ class Graph
 		}
 
 		// Now that the nodes have been created, attach each edge to each node
-		for(int currentNodeGraphKey = 0; currentNodeGraphKey < totalNodes; currentNodeGraphKey++)
+		for(int currentNodeGraphKey : graph.keySet())
 		{
 			// This is the current node we are going to add edges to.
 			// CurrentNodeGraphKey is just the key that is used to map the node to the hashmap.
@@ -453,6 +481,7 @@ class Graph
 		// 4. Check if any other obstruction is in this nodes boundary. If so, return -1, else goto 5.
 		// 5. Nothing occupies this nodes boundaries. return 0.
 
+		/*
 		double shipX = globalKnowledge.getMyShip().getPosition().getX();
 		double shipY = globalKnowledge.getMyShip().getPosition().getY();
 		double targetX = targetPosition.getX();
@@ -461,33 +490,42 @@ class Graph
 		boolean hasMyShip = false;
 		boolean hasMyTarget = false;
 
-		if((shipX >= xstart) && (shipX < xfinish) && (shipY >= ystart) && (shipY < yfinish)) hasMyShip = true;				// Check if ships contained
-		if((targetX >= xstart) && (targetX < xfinish) && (targetY >= ystart) && (targetY < yfinish)) hasMyTarget = true;	// Check if target contained
-		if(hasMyShip == true && hasMyTarget == true) return 3;																// Both ship & target.  return 3
-		else if(hasMyShip == true && hasMyTarget == false) return 1;														// Only ship.			return 1
-		else if(hasMyShip == false && hasMyTarget == true) return 2;														// Only target.			return 2
-		else
-		{
-			ArrayList<Asteroid> allAsteroidList = globalKnowledge.getAllAsteroidList();
-			for(Asteroid asteroid : allAsteroidList)
-			{
-				double xPos = asteroid.getPosition().getX();
-				double yPos = asteroid.getPosition().getY();
-
-				if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
-			}
-
-			Set<AbstractActionableObject> actionableList = globalKnowledge.getActionableList();
-			for(AbstractObject actionable : actionableList)
-			{
-				double xPos = actionable.getPosition().getX();
-				double yPos = actionable.getPosition().getY();
-
-				if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
-			}
-
-			return 0;																										// Empty node.			return 0
+		if((shipX >= xstart) && (shipX < xfinish) && (shipY >= ystart) && (shipY < yfinish)) {
+			hasMyShip = true;				// Check if ships contained
 		}
+		if((targetX >= xstart) && (targetX < xfinish) && (targetY >= ystart) && (targetY < yfinish)) {
+			hasMyTarget = true;	// Check if target contained
+		}
+		if(hasMyShip == true && hasMyTarget == true) {
+			return 3;																// Both ship & target.  return 3
+		}
+		else if(hasMyShip == true && hasMyTarget == false) {
+			return 1;														// Only ship.			return 1
+		}
+		else if(hasMyShip == false && hasMyTarget == true) {
+			return 2;														// Only target.			return 2
+		}
+		*/
+
+		ArrayList<Asteroid> allAsteroidList = globalKnowledge.getAllAsteroidList();
+		for(Asteroid asteroid : allAsteroidList)
+		{
+			double xPos = asteroid.getPosition().getX();
+			double yPos = asteroid.getPosition().getY();
+
+			if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
+		}
+
+		Set<AbstractActionableObject> actionableList = globalKnowledge.getActionableList();
+		for(AbstractObject actionable : actionableList)
+		{
+			double xPos = actionable.getPosition().getX();
+			double yPos = actionable.getPosition().getY();
+
+			if((xPos >= xstart) && (xPos < xfinish) && (yPos >= ystart) && (yPos < yfinish)) return -1;					// Holds obstruction.	return -1
+		}
+
+		return 0;																										// Empty node.			return 0
 	}
 
 	/**
@@ -502,4 +540,21 @@ class Graph
 		if(graph.get(currentGraphSearchKey) == null) return false;
 		else return true;
 	}
+
+	public Boolean startIsSameAsFinish () {
+		return startAndFinishAreSame;
+	}
+
+	public double getXMax() {
+		return xmax;
+	}
+
+	public double getYMax() {
+		return ymax;
+	}
+	public int graphSize()
+	{
+		return graph.size();
+	}
 }
+

@@ -13,4 +13,9 @@ public class Edge
 		startNode = start;
 		endNode = end;
 	}
+	
+	public Node getEndNode() {
+		return endNode;
+	}
 }
+
